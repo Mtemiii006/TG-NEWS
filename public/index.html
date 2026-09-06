@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TG News Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+        colors: {
+          base: '#0a0d13',
+          panel: '#12161f',
+          panel2: '#161b26',
+          hair: 'rgba(148,163,184,0.09)',
+          amber: '#d8a657',
+          amberdim: '#8a6a38',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body {
+    background:
+      radial-gradient(1100px 500px at 18% -8%, rgba(216,166,87,0.08), transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, rgba(52,211,153,0.05), transparent 55%),
+      #0a0d13;
+  }
+  .glass {
+    background: rgba(18,22,31,0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(148,163,184,0.09);
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.18); border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  @keyframes pulseLive { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.55); } 70% { box-shadow: 0 0 0 6px rgba(52,211,153,0); } }
+  @keyframes pulseOff  { 0%,100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.5); } 70% { box-shadow: 0 0 0 6px rgba(248,113,113,0); } }
+  .dot-live { animation: pulseLive 1.8s infinite; }
+  .dot-off  { animation: pulseOff 1.8s infinite; }
+
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .skeleton {
+    background: linear-gradient(90deg, #151a24 25%, #1c2230 37%, #151a24 63%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+
+  .fade-in { animation: fadeIn .35s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .tabbtn[data-active="true"] { background: rgba(216,166,87,0.12); color: #d8a657; border-color: rgba(216,166,87,0.35); }
+  .navbtn[data-active="true"] { color: #d8a657; }
+  .navbtn[data-active="true"] .navdot { opacity: 1; }
+
+  input[type="range"] { accent-color: #d8a657; }
+</style>
+</head>
+<body class="bg-base text-slate-200 font-sans min-h-screen pb-16 md:pb-0">
+
+<!-- ===== HEADER ===== -->
+<header class="sticky top-0 z-30 glass border-b border-hair">
+  <div class="max-w-[1500px] mx-auto px-3 md:px-5 py-2.5 flex items-center gap-3">
+    <div class="flex items-center gap-2 shrink-0">
+      <div class="w-7 h-7 rounded-md bg-amber/15 border border-amber/30 flex items-center justify-center">
+        <span class="text-amber text-[13px] font-mono font-bold">TG</span>
+      </div>
+      <div class="leading-tight">
+        <div class="text-[13px] font-semibold tracking-tight text-slate-100">News Terminal</div>
+        <div class="text-[10px] text-slate-500 font-mono -mt-0.5">v3.15 · alert-only</div>
+      </div>
+    </div>
+
+    <div id="dots" class="flex-1 flex flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar text-[10.5px] font-mono min-w-0">
+      <span class="skeleton inline-block h-5 w-40 rounded-full"></span>
+    </div>
+
+    <button id="bellBtn" aria-label="Notification settings" class="shrink-0 relative w-8 h-8 rounded-lg border border-hair bg-panel/60 hover:bg-panel2 flex items-center justify-center transition">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      <span id="bellDot" class="hidden absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber"></span>
+    </button>
+  </div>
+</header>
+
+<!-- ===== NOTIFICATION TOAST ===== -->
+<div id="notifToast" class="hidden fixed z-50 bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] max-w-sm glass rounded-2xl p-3.5 shadow-2xl fade-in">
+  <div class="flex items-start gap-3">
+    <div class="w-8 h-8 rounded-lg bg-amber/15 border border-amber/30 flex items-center justify-center shrink-0 mt-0.5">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d8a657" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="text-[13px] font-medium text-slate-100">Turn on live price alerts</div>
+      <div class="text-[11.5px] text-slate-400 mt-0.5">Get a browser notification the moment MT5 pushes a new price.</div>
+      <div class="flex gap-2 mt-2.5">
+        <button id="notifAllow" class="text-[12px] font-medium px-3 py-1.5 rounded-lg bg-amber text-[#241a0a] hover:bg-amber/90 transition">Turn on</button>
+        <button id="notifDismiss" class="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-hair text-slate-400 hover:text-slate-200 transition">Not now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN GRID ===== -->
+<main class="max-w-[1500px] mx-auto px-3 md:px-5 py-4 grid grid-cols-1 md:grid-cols-[280px_1fr_300px] gap-4">
+
+  <!-- LEFT: countdown + signals -->
+  <section id="panel-signals" class="space-y-4">
+    <div class="glass rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[11px] font-medium text-red-400">Next high-impact event</span>
+        <span class="text-[9.5px] font-mono text-slate-600 uppercase">sample</span>
+      </div>
+      <div class="text-[15px] font-mono font-semibold text-slate-100" id="countdown">--:--:--</div>
+      <div class="text-[11.5px] text-slate-400 mt-0.5" id="countdownLabel">USD CPI · 08:30 ET</div>
+    </div>
+
+    <div class="glass rounded-2xl p-4 border-l-2 !border-l-red-400/70">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500">AGG dynamic</span>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-400/10 text-red-400 border border-red-400/25">RR 1:2.5</span>
+      </div>
+      <div class="flex items-baseline gap-2 mt-1.5">
+        <span class="text-[15px] font-semibold text-red-400">SELL</span>
+        <span class="text-[13px] font-mono text-slate-200">XAUUSDm</span>
+        <span class="ml-auto text-[13px] font-mono font-semibold text-slate-100">75%</span>
+      </div>
+      <div class="w-full h-1 rounded-full bg-white/5 mt-2 overflow-hidden">
+        <div class="h-full bg-red-400/70" style="width:75%"></div>
+      </div>
+      <div class="mt-3 bg-black/25 rounded-lg p-2.5 font-mono text-[11px] text-slate-400 space-y-0.5">
+        <div>Entry <span class="text-slate-200">4432&ndash;4433</span></div>
+        <div>SL <span class="text-slate-200">4436.5</span></div>
+        <div>TP <span class="text-slate-200">4425</span></div>
+      </div>
+      <button class="copy-trade w-full mt-2.5 text-[11.5px] font-medium py-1.5 rounded-lg border border-hair text-slate-400 hover:text-amber hover:border-amber/30 transition flex items-center justify-center gap-1.5"
+        data-text="SELL XAUUSDm | Entry 4432-4433 | SL 4436.5 | TP 4425">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span class="copy-label">Copy trade</span>
+      </button>
+    </div>
+
+    <div class="glass rounded-2xl p-4 border-l-2 !border-l-emerald-400/70">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-mono uppercase tracking-wide text-slate-500">SAFE dynamic</span>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 border border-emerald-400/25">RR 1:4</span>
+      </div>
+      <div class="flex items-baseline gap-2 mt-1.5">
+        <span class="text-[15px] font-semibold text-red-400">SELL</span>
+        <span class="text-[13px] font-mono text-slate-200">XAUUSDm</span>
+        <span class="ml-auto text-[13px] font-mono font-semibold text-slate-100">88%</span>
+      </div>
+      <div class="w-full h-1 rounded-full bg-white/5 mt-2 overflow-hidden">
+        <div class="h-full bg-emerald-400/70" style="width:88%"></div>
+      </div>
+      <div class="mt-3 bg-black/25 rounded-lg p-2.5 font-mono text-[11px] text-slate-400 space-y-0.5">
+        <div>Entry <span class="text-slate-200">4429&ndash;4430</span></div>
+        <div>SL <span class="text-slate-200">4433.0</span></div>
+        <div>TP <span class="text-slate-200">4417</span></div>
+      </div>
+      <button class="copy-trade w-full mt-2.5 text-[11.5px] font-medium py-1.5 rounded-lg border border-hair text-slate-400 hover:text-amber hover:border-amber/30 transition flex items-center justify-center gap-1.5"
+        data-text="SELL XAUUSDm | Entry 4429-4430 | SL 4433.0 | TP 4417">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span class="copy-label">Copy trade</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- CENTER: ticker + chart -->
+  <section id="panel-chart" class="space-y-3 min-w-0">
+    <div class="glass rounded-2xl p-4">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div>
+          <div class="text-[11px] font-mono text-slate-500">XAUUSDm · 1m</div>
+          <div class="flex items-baseline gap-2 mt-0.5">
+            <span id="price" class="text-[26px] leading-none font-mono font-semibold text-slate-100">--</span>
+          </div>
+        </div>
+        <span id="feedBadge" class="text-[10.5px] font-mono px-2.5 py-1 rounded-full border border-hair text-slate-500 skeleton !bg-none">connecting&hellip;</span>
+
+        <div class="ml-auto flex items-center gap-3 text-[11px] font-mono text-slate-400">
+          <span>Bal <span id="bal" class="text-slate-200">$200</span></span>
+          <span>Spread <span id="spread" class="text-slate-200">--</span></span>
+          <span>FM <span id="fm" class="text-slate-200">--</span></span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1 mt-3.5">
+        <div class="flex gap-1 p-0.5 rounded-lg bg-black/25 border border-hair">
+          <button class="tabbtn text-[11px] font-mono px-2.5 py-1 rounded-md border border-transparent text-slate-500 hover:text-slate-300 transition" data-tf="1" data-active="true">1m</button>
+          <button class="tabbtn text-[11px] font-mono px-2.5 py-1 rounded-md border border-transparent text-slate-500 hover:text-slate-300 transition" data-tf="5">5m</button>
+          <button class="tabbtn text-[11px] font-mono px-2.5 py-1 rounded-md border border-transparent text-slate-500 hover:text-slate-300 transition" data-tf="15">15m</button>
+          <button class="tabbtn text-[11px] font-mono px-2.5 py-1 rounded-md border border-transparent text-slate-500 hover:text-slate-300 transition" data-tf="60">1H</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl p-2 relative">
+      <div id="chartSkeleton" class="skeleton rounded-xl" style="height:420px"></div>
+      <div id="chart" class="hidden" style="height:420px"></div>
+    </div>
+  </section>
+
+  <!-- RIGHT: confluence + dxy + journal -->
+  <section id="panel-confluence" class="space-y-4">
+    <div class="glass rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-2.5">
+        <span class="text-[11px] font-medium text-slate-300">Confluence</span>
+        <span class="text-[12px] font-mono font-semibold text-amber">10/13</span>
+      </div>
+      <div class="space-y-2.5">
+        <div>
+          <div class="flex justify-between text-[10.5px] font-mono text-slate-500 mb-1"><span>Macro</span><span>5/5</span></div>
+          <div class="h-1.5 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-amber/70" style="width:100%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[10.5px] font-mono text-slate-500 mb-1"><span>Technical</span><span>2/5</span></div>
+          <div class="h-1.5 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-amber/70" style="width:40%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[10.5px] font-mono text-slate-500 mb-1"><span>Sentiment</span><span>4/5</span></div>
+          <div class="h-1.5 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-amber/70" style="width:80%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[10.5px] font-mono text-slate-500 mb-1"><span>Risk</span><span>5/5</span></div>
+          <div class="h-1.5 rounded-full bg-white/5 overflow-hidden"><div class="h-full bg-amber/70" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-600 mt-3">From last generated brief &middot; not live-streamed by the server yet</div>
+    </div>
+
+    <div class="glass rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-medium text-slate-300">DXY bias</span>
+        <span id="dxy" class="text-[12px] font-mono text-slate-500">&mdash;</span>
+      </div>
+      <div class="text-[10px] text-slate-600 mt-1">Awaiting feed &middot; not sent over the socket yet</div>
+    </div>
+
+    <div class="glass rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[11px] font-medium text-slate-300">Journal</span>
+        <span class="w-1.5 h-1.5 rounded-full bg-amber/60"></span>
+      </div>
+      <div id="journal" class="space-y-2 max-h-56 overflow-y-auto text-[11px] font-mono">
+        <div class="text-slate-600">Waiting for the first event&hellip;</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===== MOBILE BOTTOM NAV ===== -->
+<nav class="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-hair flex">
+  <button class="navbtn flex-1 flex flex-col items-center gap-0.5 py-2.5 text-slate-500 transition" data-panel="panel-signals" data-active="true">
+    <span class="navdot w-1 h-1 rounded-full bg-amber opacity-0 transition-opacity"></span>
+    <span class="text-[10.5px] font-medium">Signals</span>
+  </button>
+  <button class="navbtn flex-1 flex flex-col items-center gap-0.5 py-2.5 text-slate-500 transition" data-panel="panel-chart">
+    <span class="navdot w-1 h-1 rounded-full bg-amber opacity-0 transition-opacity"></span>
+    <span class="text-[10.5px] font-medium">Chart</span>
+  </button>
+  <button class="navbtn flex-1 flex flex-col items-center gap-0.5 py-2.5 text-slate-500 transition" data-panel="panel-confluence">
+    <span class="navdot w-1 h-1 rounded-full bg-amber opacity-0 transition-opacity"></span>
+    <span class="text-[10.5px] font-medium">Confluence</span>
+  </button>
+</nav>
+
+<script>
+// ---------- mobile bottom nav ----------
+const navBtns = document.querySelectorAll('.navbtn');
+const panels = ['panel-signals','panel-chart','panel-confluence'];
+function showPanel(id){
+  panels.forEach(p=>{
+    const active = p === id;
+    document.getElementById(p).classList.toggle('hidden', window.innerWidth < 768 ? !active : false);
+  });
+  navBtns.forEach(b=> b.dataset.active = (b.dataset.panel === id) ? 'true' : 'false');
+}
+navBtns.forEach(b=> b.addEventListener('click', ()=> showPanel(b.dataset.panel)));
+function applyResponsive(){ if(window.innerWidth < 768){ showPanel('panel-signals'); } else { panels.forEach(p=>document.getElementById(p).classList.remove('hidden')); } }
+window.addEventListener('resize', applyResponsive);
+applyResponsive();
+
+// ---------- notification toast (custom UI, permission only requested on click) ----------
+const notifToast = document.getElementById('notifToast');
+const bellDot = document.getElementById('bellDot');
+if('Notification' in window && Notification.permission === 'default'){
+  setTimeout(()=> notifToast.classList.remove('hidden'), 900);
+  bellDot.classList.remove('hidden');
+}
+document.getElementById('notifAllow').addEventListener('click', async ()=>{
+  const perm = await Notification.requestPermission();
+  notifToast.classList.add('hidden');
+  bellDot.classList.toggle('hidden', perm !== 'default');
+});
+document.getElementById('notifDismiss').addEventListener('click', ()=> notifToast.classList.add('hidden'));
+document.getElementById('bellBtn').addEventListener('click', ()=>{
+  if('Notification' in window && Notification.permission === 'default') notifToast.classList.remove('hidden');
+});
+
+// ---------- copy trade buttons ----------
+document.querySelectorAll('.copy-trade').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(btn.dataset.text);
+      const label = btn.querySelector('.copy-label');
+      const prev = label.textContent;
+      label.textContent = 'Copied';
+      setTimeout(()=> label.textContent = prev, 1400);
+    }catch(e){}
+  });
+});
+
+// ---------- sample countdown (client-side only - server doesn't push event timing yet) ----------
+let countdownSecs = 14*60 + 22;
+function tickCountdown(){
+  if(countdownSecs <= 0){ countdownSecs = 45*60; }
+  const h = Math.floor(countdownSecs/3600), m = Math.floor((countdownSecs%3600)/60), s = countdownSecs%60;
+  document.getElementById('countdown').textContent =
+    (h>0? String(h).padStart(2,'0')+':':'') + String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  countdownSecs--;
+}
+tickCountdown();
+setInterval(tickCountdown, 1000);
+
+// ---------- journal ----------
+function logJournal(text, tone){
+  const el = document.getElementById('journal');
+  if(el.children.length === 1 && el.children[0].textContent.startsWith('Waiting')) el.innerHTML = '';
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const color = tone === 'bad' ? 'text-red-400' : tone === 'good' ? 'text-emerald-400' : 'text-slate-400';
+  const row = document.createElement('div');
+  row.className = 'fade-in flex gap-2';
+  row.innerHTML = `<span class="text-slate-600 shrink-0">${time}</span><span class="${color}">${text}</span>`;
+  el.prepend(row);
+  while(el.children.length > 30) el.removeChild(el.lastChild);
+}
+
+// ---------- WS + status polling (unchanged endpoints/format) ----------
+let sawFirstMessage = false;
+function revealLiveUI(){
+  if(sawFirstMessage) return;
+  sawFirstMessage = true;
+  document.getElementById('chartSkeleton').classList.add('hidden');
+  document.getElementById('chart').classList.remove('hidden');
+  document.getElementById('feedBadge').classList.remove('skeleton');
+}
+
+let wasOnline = null;
+const proto = location.protocol==='https:'?'wss':'ws';
+let reconnectDelay = 1000;
+let ws;
+
+function connectWS(){
+  ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+
+  ws.addEventListener('open', ()=>{
+    reconnectDelay = 1000;
+    logJournal('Connected to terminal feed');
+  });
+
+  ws.addEventListener('close', ()=>{
+    logJournal('Feed connection closed — reconnecting…', 'bad');
+    setTimeout(connectWS, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  });
+
+  ws.addEventListener('message', e=>{
+  const d = JSON.parse(e.data);
+  if(d.mt5){
+    revealLiveUI();
+    const m = d.mt5;
+    document.getElementById('price').textContent = m.bid?.toFixed(2) || '--';
+    document.getElementById('bal').textContent && (document.getElementById('bal').textContent = `$${m.bal||200}`);
+    document.getElementById('spread').textContent = (m.spread ?? '--');
+    document.getElementById('fm').textContent = m.fm ? `${Number(m.fm).toFixed(0)}%` : '--';
+
+    const badge = document.getElementById('feedBadge');
+    badge.textContent = m.online ? 'MT5 live' : 'Yahoo backup';
+    badge.className = 'text-[10.5px] font-mono px-2.5 py-1 rounded-full border ' +
+      (m.online ? 'border-emerald-400/30 text-emerald-400 bg-emerald-400/10' : 'border-red-400/30 text-red-400 bg-red-400/10');
+
+    if(wasOnline !== null && wasOnline !== m.online){
+      logJournal(m.online ? 'MT5 feed back online' : 'MT5 feed dropped &mdash; on Yahoo backup', m.online ? 'good' : 'bad');
+    }
+    wasOnline = m.online;
+
+    document.getElementById('dots').innerHTML = Object.entries(d.sources||{}).map(([k,v])=>{
+      const live = v === 'LIVE';
+      return `<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${live?'border-emerald-400/25 text-emerald-400':'border-red-400/25 text-red-400'} bg-black/20">
+        <span class="w-1.5 h-1.5 rounded-full ${live?'bg-emerald-400 dot-live':'bg-red-400 dot-off'}"></span>${k.toUpperCase()}
+      </span>`;
+    }).join('');
+
+    if(Notification.permission==='granted' && m.online) new Notification(`XAUUSDm ${m.bid}`, {body:'MT5 live update'});
+  }
+  });
+}
+connectWS();
+
+async function refresh(){
+  const s = await fetch('/api/sources/status').then(r=>r.json()).catch(()=>null);
+  if(!s) return;
+  revealLiveUI();
+  document.getElementById('dots').innerHTML = Object.entries(s.sources).map(([k,v])=>{
+    const live = v === 'LIVE';
+    return `<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${live?'border-emerald-400/25 text-emerald-400':'border-red-400/25 text-red-400'} bg-black/20">
+      <span class="w-1.5 h-1.5 rounded-full ${live?'bg-emerald-400 dot-live':'bg-red-400 dot-off'}"></span>${k.toUpperCase()}
+    </span>`;
+  }).join('');
+}
+setInterval(refresh, 3000);
+refresh();
+setTimeout(revealLiveUI, 2500); // don't leave the skeleton stuck if both WS and poll are slow
+
+// ---------- chart (demo candles - server has no OHLC feed yet) ----------
+const chartEl = document.getElementById('chart');
+const chart = LightweightCharts.createChart(chartEl, {
+  layout: { background: { color: 'transparent' }, textColor: '#7d8698' },
+  grid: { vertLines: { color: 'rgba(148,163,184,0.06)' }, horzLines: { color: 'rgba(148,163,184,0.06)' } },
+  rightPriceScale: { borderColor: 'rgba(148,163,184,0.09)' },
+  timeScale: { borderColor: 'rgba(148,163,184,0.09)' },
+  width: chartEl.clientWidth,
+  height: 420
+});
+const series = chart.addCandlestickSeries({
+  upColor: '#34d399', downColor: '#f87171', borderVisible: false,
+  wickUpColor: '#34d399', wickDownColor: '#f87171'
+});
+
+function genCandles(stepSec){
+  const data = [];
+  let base = 4433;
+  let t = Math.floor(Date.now()/1000) - 100*stepSec;
+  for(let i=0;i<100;i++){
+    const o = base + (Math.random()-0.5)*2;
+    const c = o + (Math.random()-0.5)*1.5;
+    data.push({ time: t + i*stepSec, open:o, high:Math.max(o,c)+0.8, low:Math.min(o,c)-0.8, close:c });
+    base = c;
+  }
+  return data;
+}
+series.setData(genCandles(60));
+
+document.querySelectorAll('.tabbtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabbtn').forEach(b=> b.dataset.active = 'false');
+    btn.dataset.active = 'true';
+    series.setData(genCandles(Number(btn.dataset.tf) * 60));
+  });
+});
+window.addEventListener('resize', ()=> chart.applyOptions({ width: chartEl.clientWidth }));
+</script>
+</body>
+</html>
